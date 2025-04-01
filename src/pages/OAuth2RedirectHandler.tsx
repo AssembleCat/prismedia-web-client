@@ -10,30 +10,17 @@ const OAuth2RedirectHandler: React.FC = () => {
   const [redirectTo, setRedirectTo] = useState<string>('/');
 
   useEffect(() => {
-    const getToken = async () => {
+    const handleRedirect = async () => {
       try {
-        // URL에서 토큰 추출
-        const params = new URLSearchParams(location.search);
-        const token = params.get('token');
+        // 쿠키 기반 인증으로 변경되어 URL에서 토큰을 추출할 필요가 없음
+        // 쿠키는 자동으로 요청에 포함됨
         
-        if (!token) {
-          setError('인증 토큰을 찾을 수 없습니다.');
-          setRedirectTo('/login');
-          setLoading(false);
-          return;
-        }
-
-        // 토큰 저장
-        localStorage.setItem('accessToken', token);
-        
-        // 사용자 정보 가져오기
+        // 사용자 정보 가져오기 (withCredentials 옵션 추가)
         const response = await axios.get(`${API_URL}/api/user/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+          withCredentials: true  // 쿠키를 요청에 포함
         });
         
-        // 사용자 정보 저장
+        // 사용자 정보만 저장
         localStorage.setItem('user', JSON.stringify(response.data));
         
         setLoading(false);
@@ -45,7 +32,7 @@ const OAuth2RedirectHandler: React.FC = () => {
       }
     };
 
-    getToken();
+    handleRedirect();
   }, [location]);
 
   if (loading) {
