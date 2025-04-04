@@ -80,20 +80,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkAuth = async () => {
       try {
         // 사용자 정보 요청 (withCredentials 옵션 추가)
-        const response = await axios.get(`${API_URL}/api/user/me`, {
+        const response = await axios.get(`${API_URL}/api/auth/me`, {
           withCredentials: true
         });
 
-        // 로컬 스토리지에 사용자 정보만 저장
-        localStorage.setItem('user', JSON.stringify(response.data));
-        
-        setState({
-          isAuthenticated: true,
-          user: response.data,
-          loading: false,
-          error: null
-        });
+        if (response.data) {
+          // 로컬 스토리지에 사용자 정보만 저장
+          localStorage.setItem('user', JSON.stringify(response.data));
+          
+          setState({
+            isAuthenticated: true,
+            user: response.data,
+            loading: false,
+            error: null
+          });
+          console.log('사용자 인증 성공:', response.data);
+        } else {
+          throw new Error('사용자 정보를 가져올 수 없습니다.');
+        }
       } catch (error) {
+        console.error('인증 확인 오류:', error);
         // 로컬 스토리지에서 사용자 정보 제거
         localStorage.removeItem('user');
         
@@ -106,33 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // 로컬 스토리지에 사용자 정보가 있는지 확인
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        setState(prev => ({
-          ...prev,
-          isAuthenticated: true,
-          user,
-          loading: true
-        }));
-        
-        // 서버에서 최신 사용자 정보와 인증 상태 확인
-        checkAuth();
-      } catch (e) {
-        localStorage.removeItem('user');
-        setState(prev => ({
-          ...prev,
-          loading: false
-        }));
-      }
-    } else {
-      setState(prev => ({
-        ...prev,
-        loading: false
-      }));
-    }
+    // 페이지 로드 시 항상 서버에서 인증 상태 확인
+    checkAuth();
   }, []);
 
   // Google OAuth2 로그인
@@ -147,19 +128,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await axios.post(`${API_URL}/api/auth/logout`, {}, {
         withCredentials: true
       });
+      
+      // 로컬 스토리지에서 사용자 정보 제거
+      localStorage.removeItem('user');
+      
+      // 인증 상태 초기화
+      setState({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: null
+      });
+      
+      // 홈페이지로 리다이렉트
+      window.location.href = '/';
     } catch (error) {
       console.error('로그아웃 요청 실패:', error);
+      
+      // 오류가 발생해도 로컬 상태는 초기화
+      localStorage.removeItem('user');
+      setState({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: '로그아웃 처리 중 오류가 발생했습니다.'
+      });
     }
-    
-    // 로컬 스토리지에서 사용자 정보 제거
-    localStorage.removeItem('user');
-    
-    setState({
-      isAuthenticated: false,
-      user: null,
-      loading: false,
-      error: null
-    });
   };
 
   return (

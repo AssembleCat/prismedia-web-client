@@ -14,17 +14,19 @@ const Header: React.FC = () => {
           <nav className="flex items-center space-x-4">
             <Link to="/" className="hover:text-amber-200">홈</Link>
             
-            {isAuthenticated ? (
+            {isAuthenticated && user ? (
               <div className="flex items-center space-x-4">
                 <div className="flex items-center">
-                  {user?.imageUrl && (
+                  {user.imageUrl && (
                     <img 
                       src={user.imageUrl} 
-                      alt={user.name} 
+                      alt={user.name || '사용자'} 
                       className="w-8 h-8 rounded-full mr-2"
                     />
                   )}
-                  <span className="text-sm font-medium">{user?.name}</span>
+                  <span className="text-sm font-medium">
+                    {user.email || user.name || '사용자'}
+                  </span>
                 </div>
                 <button 
                   onClick={logout}
