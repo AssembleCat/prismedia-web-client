@@ -3,11 +3,8 @@ export interface ApiResponse<T> {
   success: boolean;
   data: T;
   error?: string;
-  meta?: {
-    totalCount?: number;
-    page?: number;
-    pageSize?: number;
-  };
+  meta?: any;
+  status?: number; // HTTP 상태 코드 추가
 }
 
 // 뉴스 아이템 타입

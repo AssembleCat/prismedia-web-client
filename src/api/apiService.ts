@@ -6,14 +6,21 @@ const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
 };
 
+// 인증 관련 함수
+export const redirectToLogin = (): void => {
+  window.location.href = '/login';
+};
+
 // 기본 fetch 함수
 async function fetchApi<T>(
   endpoint: string, 
-  options: RequestInit = {}
+  options: RequestInit = {},
+  requiresAuth: boolean = false
 ): Promise<ApiResponse<T>> {
   try {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log(`API 요청: ${url}`);
+    
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -22,6 +29,23 @@ async function fetchApi<T>(
       },
       credentials: 'include', // HttpOnly 쿠키를 사용하기 위한 설정
     });
+
+    // 401 Unauthorized 응답 처리
+    if (response.status === 401) {
+      console.warn('인증되지 않은 요청: 로그인이 필요합니다.');
+      
+      // 인증이 필요한 요청인 경우에만 로그인 페이지로 리다이렉트
+      if (requiresAuth) {
+        redirectToLogin();
+      }
+      
+      return {
+        success: false,
+        data: {} as T,
+        error: '인증이 필요합니다. 로그인 페이지로 이동합니다.',
+        status: 401
+      };
+    }
 
     // 응답이 JSON이 아닌 경우 처리
     const contentType = response.headers.get('content-type');
@@ -37,6 +61,7 @@ async function fetchApi<T>(
         success: false,
         data: {} as T,
         error: data.error || `HTTP 오류: ${response.status}`,
+        status: response.status
       };
     }
 
@@ -44,6 +69,7 @@ async function fetchApi<T>(
       success: true,
       data: data as T,
       meta: data.meta,
+      status: response.status
     };
   } catch (error) {
     console.error('API 요청 오류:', error);
@@ -51,6 +77,7 @@ async function fetchApi<T>(
       success: false,
       data: {} as T,
       error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      status: 500
     };
   }
 }
@@ -147,7 +174,7 @@ export const userApi = {
     return fetchApi<{ token: string; user: any }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
-    });
+    }, true);
   },
 
   // 사용자 등록
@@ -155,30 +182,26 @@ export const userApi = {
     return fetchApi<{ token: string; user: any }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
-    });
+    }, true);
   },
 
   // 사용자 프로필 가져오기
   getProfile: async (): Promise<ApiResponse<any>> => {
-    return fetchApi<any>('/api/user/profile', {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-    });
+    return fetchApi<any>('/api/user/profile', {}, true);
   },
   
   // 토큰 갱신 (리프레시 토큰 사용)
   refreshToken: async (): Promise<ApiResponse<{ accessToken: string }>> => {
     return fetchApi<{ accessToken: string }>('/api/auth/refresh', {
       method: 'POST',
-    });
+    }, true);
   },
   
   // 로그아웃
   logout: async (): Promise<ApiResponse<void>> => {
     return fetchApi<void>('/api/auth/logout', {
       method: 'POST',
-    });
+    }, true);
   },
 };
 
