@@ -4,6 +4,7 @@ import NewsCard from '../components/NewsCard';
 import { useHomeNews } from '../hooks/useNewsApi';
 import { NewsItemResponse } from '../api/types';
 import { mockFeaturedNews, mockTrendingNews, mockRecommendedNews } from '../utils/mockData';
+import { Link } from 'react-router-dom';
 
 const HomePage: React.FC = () => {
   const [showMockData, setShowMockData] = useState(false);
@@ -24,6 +25,29 @@ const HomePage: React.FC = () => {
         <main className="container mx-auto px-4 py-6 max-w-4xl">
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+  
+  // 인증 오류 처리
+  if (error && error.includes('인증이 필요한 컨텐츠')) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-amber-100">
+        <Header />
+        <main className="container mx-auto px-4 py-6 max-w-4xl">
+          <div className="flex flex-col justify-center items-center h-64 text-center">
+            <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-4 rounded shadow-md">
+              <p className="font-bold">로그인이 필요합니다</p>
+              <p className="mt-2">{error}</p>
+            </div>
+            <Link 
+              to="/login" 
+              className="mt-4 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded transition-colors duration-200"
+            >
+              로그인 페이지로 이동
+            </Link>
           </div>
         </main>
       </div>

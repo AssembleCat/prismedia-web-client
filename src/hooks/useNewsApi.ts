@@ -41,20 +41,33 @@ export function useHomeNews(): ApiState<NewsListResponse> & { useMockData: boole
             error: null,
           });
         } else {
-          setUseMockData(true);
-          setState({
-            data: null,
-            isLoading: false,
-            error: response.error || '뉴스를 불러오는데 실패했습니다.',
-          });
+          console.error('홈페이지 뉴스 가져오기 실패:', response.error);
+          
+          // 401 오류 처리 (인증 필요)
+          if (response.status === 401) {
+            setState({
+              data: null,
+              isLoading: false,
+              error: '인증이 필요한 컨텐츠입니다. 로그인 후 이용해주세요.',
+            });
+            // 로그인 페이지로 리다이렉트는 apiService에서 처리됨
+          } else {
+            setState({
+              data: null,
+              isLoading: false,
+              error: response.error || '뉴스를 불러오는데 실패했습니다.',
+            });
+            setUseMockData(true); // API 오류 시 모의 데이터 사용
+          }
         }
-      } catch (error) {
-        setUseMockData(true);
+      } catch (err) {
+        console.error('홈페이지 뉴스 가져오기 오류:', err);
         setState({
           data: null,
           isLoading: false,
-          error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+          error: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.',
         });
+        setUseMockData(true); // 예외 발생 시 모의 데이터 사용
       }
     };
 
