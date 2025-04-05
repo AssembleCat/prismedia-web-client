@@ -20,6 +20,13 @@ const AuthContext = createContext<AuthContextType>({
 
 // 액세스 토큰 갱신 함수
 const refreshAccessToken = async (): Promise<boolean> => {
+  // 로컬 스토리지에 사용자 정보가 없으면 토큰 갱신을 시도하지 않음
+  const userStr = localStorage.getItem('user');
+  if (!userStr) {
+    console.log('사용자 정보가 없어 토큰 갱신을 시도하지 않습니다.');
+    return false;
+  }
+
   try {
     await axios.post(`${API_URL}/api/auth/refresh-token`, {}, {
       withCredentials: true
@@ -37,6 +44,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // API 요청 인터셉터 설정
   useEffect(() => {
+    // 요청 인터셉터 - 인증 토큰이 필요한 요청에만 withCredentials 추가
+    const requestInterceptor = axios.interceptors.request.use(
+      (config) => {
+        // 인증이 필요한 API 요청인 경우에만 withCredentials 설정
+        if (config.url?.includes('/api/') && !config.url.includes('/api/news/')) {
+          config.withCredentials = true;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+
     // 응답 인터셉터
     const responseInterceptor = axios.interceptors.response.use(
       (response) => response,
@@ -45,6 +64,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // 401 에러이고 재시도하지 않은 요청인 경우
         if (error.response?.status === 401 && !originalRequest._retry) {
+          // 로그인 페이지나 공개 API에 대한 요청은 토큰 갱신을 시도하지 않음
+          if (originalRequest.url?.includes('/api/auth/me') || 
+              originalRequest.url?.includes('/api/auth/refresh-token')) {
+            console.log('인증 관련 API 요청에 대한 401 응답입니다. 토큰 갱신을 시도하지 않습니다.');
+            return Promise.reject(error);
+          }
+          
           originalRequest._retry = true;
           
           // 토큰 갱신 시도
@@ -71,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     return () => {
       // 컴포넌트 언마운트 시 인터셉터 제거
+      axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(responseInterceptor);
     };
   }, []);
@@ -78,41 +105,139 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 컴포넌트 마운트 시 인증 상태 확인
   useEffect(() => {
     const checkAuth = async () => {
-      try {
-        // 사용자 정보 요청 (withCredentials 옵션 추가)
-        const response = await axios.get(`${API_URL}/api/auth/me`, {
-          withCredentials: true
-        });
-
-        if (response.data) {
-          // 로컬 스토리지에 사용자 정보만 저장
-          localStorage.setItem('user', JSON.stringify(response.data));
-          
-          setState({
+      console.log('인증 상태 확인 시작');
+      
+      // 로컬 스토리지에 사용자 정보가 있는지 먼저 확인
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        console.log('로컬 스토리지에 사용자 정보 있음');
+        try {
+          // 로컬 스토리지의 사용자 정보로 먼저 상태 설정
+          const user = JSON.parse(userStr);
+          setState(prev => ({
+            ...prev,
             isAuthenticated: true,
-            user: response.data,
+            user,
+            loading: true
+          }));
+          
+          // 서버에서 최신 사용자 정보 확인
+          try {
+            console.log('서버에 사용자 정보 요청 시작');
+            const response = await axios.get(`${API_URL}/api/auth/me`, {
+              withCredentials: true
+            });
+
+            if (response.data) {
+              // 로컬 스토리지 업데이트
+              localStorage.setItem('user', JSON.stringify(response.data));
+              
+              setState({
+                isAuthenticated: true,
+                user: response.data,
+                loading: false,
+                error: null
+              });
+              console.log('사용자 인증 성공:', response.data);
+            }
+          } catch (error: any) {
+            console.error('서버에서 사용자 정보 가져오기 실패:', error);
+            console.error('오류 응답:', error.response?.data);
+            console.error('오류 상태:', error.response?.status);
+            
+            // 401 오류인 경우 토큰 갱신 시도
+            if (error.response?.status === 401) {
+              console.log('토큰 갱신 시도');
+              const refreshed = await refreshAccessToken();
+              
+              if (refreshed) {
+                // 토큰 갱신 성공 시 다시 사용자 정보 요청
+                try {
+                  const newResponse = await axios.get(`${API_URL}/api/auth/me`, {
+                    withCredentials: true
+                  });
+                  
+                  if (newResponse.data) {
+                    localStorage.setItem('user', JSON.stringify(newResponse.data));
+                    setState({
+                      isAuthenticated: true,
+                      user: newResponse.data,
+                      loading: false,
+                      error: null
+                    });
+                    console.log('토큰 갱신 후 사용자 인증 성공:', newResponse.data);
+                    return;
+                  }
+                } catch (refreshError) {
+                  console.error('토큰 갱신 후 사용자 정보 요청 실패:', refreshError);
+                }
+              }
+              
+              // 토큰 갱신 실패 또는 갱신 후 요청 실패 시 로그아웃 처리
+              localStorage.removeItem('user');
+              setState({
+                isAuthenticated: false,
+                user: null,
+                loading: false,
+                error: '인증이 만료되었습니다. 다시 로그인해주세요.'
+              });
+            } else {
+              // 401 이외의 오류는 로컬 정보로 인증 상태 유지
+              setState(prev => ({
+                ...prev,
+                loading: false
+              }));
+            }
+          }
+        } catch (e) {
+          console.error('로컬 스토리지 사용자 정보 파싱 오류:', e);
+          localStorage.removeItem('user');
+          setState({
+            isAuthenticated: false,
+            user: null,
             loading: false,
             error: null
           });
-          console.log('사용자 인증 성공:', response.data);
-        } else {
-          throw new Error('사용자 정보를 가져올 수 없습니다.');
         }
-      } catch (error) {
-        console.error('인증 확인 오류:', error);
-        // 로컬 스토리지에서 사용자 정보 제거
-        localStorage.removeItem('user');
+      } else {
+        console.log('로컬 스토리지에 사용자 정보 없음, 쿠키로 인증 시도');
         
-        setState({
-          isAuthenticated: false,
-          user: null,
-          loading: false,
-          error: null
-        });
+        // 로컬 스토리지에 사용자 정보가 없어도 쿠키가 있을 수 있으므로 서버에 확인
+        try {
+          const response = await axios.get(`${API_URL}/api/auth/me`, {
+            withCredentials: true
+          });
+          
+          if (response.data) {
+            localStorage.setItem('user', JSON.stringify(response.data));
+            setState({
+              isAuthenticated: true,
+              user: response.data,
+              loading: false,
+              error: null
+            });
+            console.log('쿠키로 사용자 인증 성공:', response.data);
+          } else {
+            setState({
+              isAuthenticated: false,
+              user: null,
+              loading: false,
+              error: null
+            });
+          }
+        } catch (error) {
+          console.log('쿠키로 인증 실패, 비로그인 상태로 설정');
+          setState({
+            isAuthenticated: false,
+            user: null,
+            loading: false,
+            error: null
+          });
+        }
       }
     };
 
-    // 페이지 로드 시 항상 서버에서 인증 상태 확인
+    // 페이지 로드 시 인증 상태 확인
     checkAuth();
   }, []);
 
